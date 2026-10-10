@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HLS Downloader — m3u8 to MP4</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="container">
+    <header>
+      <h1>HLS Downloader</h1>
+      <p class="subtitle">Download m3u8 streams and save them as MP4 via ffmpeg</p>
+    </header>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Downloads</h2>
+        <button id="add-row" class="btn btn-ghost" type="button">+ Add another</button>
+      </div>
+
+      <form id="download-form">
+        <div id="rows"></div>
+        <div class="actions">
+          <button class="btn btn-primary" type="submit">Start Download</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Memory Usage</h2>
+        <span class="muted">Go runtime, sampled every 1s</span>
+      </div>
+      <canvas id="mem-chart" height="160"></canvas>
+      <div class="stats-row">
+        <div class="stat"><span class="stat-label">Heap</span><span id="stat-heap" class="stat-value">–</span></div>
+        <div class="stat"><span class="stat-label">Heap Reserved</span><span id="stat-heapsys" class="stat-value">–</span></div>
+        <div class="stat"><span class="stat-label">Total Sys</span><span id="stat-sys" class="stat-value">–</span></div>
+        <div class="stat"><span class="stat-label">Goroutines</span><span id="stat-goro" class="stat-value">–</span></div>
+        <div class="stat"><span class="stat-label">GC Cycles</span><span id="stat-gc" class="stat-value">–</span></div>
+      </div>
+      <div class="legend">
+        <span><i class="swatch swatch-heap"></i>Heap Alloc</span>
+        <span><i class="swatch swatch-sys"></i>Total Sys</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Jobs</h2>
+        <span class="muted">Output: ~/Documents/test</span>
+      </div>
+      <ul id="job-list" class="job-list">
+        <li class="empty">No jobs yet</li>
+      </ul>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

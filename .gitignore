@@ -1,0 +1,21 @@
+# Compiled binary
+hls-downloader
+
+# Go build/test artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/vendor/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Downloaded output (if output dir ever points inside repo)
+*.mp4
