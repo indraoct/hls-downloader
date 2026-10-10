@@ -19,3 +19,4 @@ hls-downloader
 
 # Downloaded output (if output dir ever points inside repo)
 *.mp4
+downloads/

@@ -1,0 +1,5 @@
+.git
+downloads/
+*.mp4
+hls-downloader
+start-code.md

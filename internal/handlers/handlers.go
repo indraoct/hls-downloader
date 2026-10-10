@@ -58,7 +58,10 @@ func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
 // Jobs handles GET /api/jobs.
 func (h *Handler) Jobs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{"jobs": h.uc.List()})
+	json.NewEncoder(w).Encode(map[string]any{
+		"jobs":       h.uc.List(),
+		"output_dir": h.uc.OutputPath(),
+	})
 }
 
 // Cancel handles POST /api/cancel?id=job-N and cancels a queued or

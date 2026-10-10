@@ -9,8 +9,9 @@ A small web application to download HLS (`.m3u8`) video streams and save them as
 - Dynamic input rows — add/remove as many URL + filename pairs as needed
 - Automatic filename sanitization: spaces and special characters become `_`, then a `_ffmpeg.mp4` suffix is appended
 - Live job status (queued / running / done / error) with error details from ffmpeg
-- Output saved to `~/Documents/test`
+- Output saved to `$OUTPUT_DIR` (default `~/Documents/test`)
 - Memory-safe: bounded job history and bounded ffmpeg log capture
+- Docker deployment ready — `Dockerfile` + `docker-compose.yml` included
 
 ## Prerequisites
 
@@ -27,16 +28,56 @@ brew install ffmpeg
 ```bash
 go build -o hls-downloader ./cmd
 ./hls-downloader
+
+# optionally override the output directory
+OUTPUT_DIR=~/Movies ./hls-downloader
 ```
 
 Then open **http://localhost:6969** in your browser.
+
+## Docker
+
+```bash
+docker compose up --build
+```
+
+Then open **http://localhost:6969**. Downloaded files land in `./downloads` on the host — override the host side with:
+
+```bash
+HOST_OUTPUT_DIR=/path/on/host docker compose up
+```
+
+Or with plain Docker:
+
+```bash
+docker build -t hls-downloader .
+docker run -p 6969:6969 -e OUTPUT_DIR=/downloads -v "$PWD/downloads:/downloads" hls-downloader
+```
+
+## Makefile
+
+Common tasks are wrapped in a `Makefile` (`make help` lists them):
+
+| Command             | Action                                 |
+|---------------------|----------------------------------------|
+| `make build`        | Compile `./hls-downloader` from `cmd/` |
+| `make run`          | Build and start the server             |
+| `make test`         | Run tests                              |
+| `make vet` / `fmt`  | `go vet` / `gofmt`                     |
+| `make docker-build` | `docker build -t hls-downloader .`     |
+| `make docker-up`    | `docker compose up --build -d`         |
+| `make docker-down`  | `docker compose down`                  |
+| `make docker-logs`  | Tail container logs                    |
+| `make clean`        | Remove the built binary                |
+
+Override the output dir with `OUTPUT_DIR=~/Movies make run`.
 
 ## Usage
 
 1. Enter an **m3u8 URL** (required) and a **file name** (optional — defaults to `video`).
 2. Click **+ Add another** to queue multiple downloads; all run in parallel.
 3. Click **Start Download**. The Jobs panel shows live progress status.
-4. Finished files appear in `~/Documents/test` as `<name>_ffmpeg.mp4`.
+4. Finished files appear in the output directory (`$OUTPUT_DIR`, default `~/Documents/test`) as `<name>_ffmpeg.mp4`.
 
 Example: `My Movie (2024)!` → `My_Movie_2024_ffmpeg.mp4`
 
@@ -66,7 +107,7 @@ flowchart LR
 
     UI -- "REST /api/*" --> MAIN
     UC -- "exec.CommandContext" --> FF["ffmpeg process"]
-    FF -- "*.mp4" --> OUT["~/Documents/test/"]
+    FF -- "*.mp4" --> OUT["$OUTPUT_DIR<br/>default ~/Documents/test"]
 ```
 
 ### Download lifecycle
@@ -121,7 +162,7 @@ stateDiagram-v2
 |--------|-----------------|--------------------------------------------------------|
 | GET    | `/`             | Web UI (static files)                                  |
 | POST   | `/api/download` | `{"jobs":[{"url":"...m3u8","filename":"name"}, ...]}`  |
-| GET    | `/api/jobs`     | `{"jobs":[{id,url,filename,status,error,started_at}]}` |
+| GET    | `/api/jobs`     | `{"jobs":[{id,url,filename,status,error,started_at}],"output_dir":"..."}` |
 | POST   | `/api/cancel`   | Query: `?id=job-N` — cancels a queued/running job    |
 | GET    | `/api/memstats` | `{heap_alloc,heap_sys,sys,num_gc,goroutines}`        |
 
@@ -148,7 +189,7 @@ ffmpeg -y -i "<m3u8-url>" -c copy -bsf:a aac_adtstoasc "<name>_ffmpeg.mp4"
 | What                | Where                                                |
 |---------------------|------------------------------------------------------|
 | Port                | `cmd/main.go` — `addr := ":6969"`                    |
-| Output directory    | `internal/usecases/downloader.go` — `OutputDir()`    |
+| Output directory    | `OUTPUT_DIR` env var (default `~/Documents/test`) — `resolveOutputDir()` |
 | Retained job history| `internal/repositories/job_repository.go` — `maxFinishedJobs` |
 | Parallel downloads  | `internal/usecases/downloader.go` — `maxConcurrentDownloads`  |
 
@@ -171,6 +212,10 @@ hls-downloader/
 │   ├── index.html                   # UI markup
 │   ├── style.css                    # UI styles
 │   └── app.js                       # Dynamic inputs + status polling
+├── Makefile                       # build/run/test/docker task shortcuts
+├── Dockerfile                     # Multi-stage: Go build + Alpine + ffmpeg
+├── docker-compose.yml             # Port, OUTPUT_DIR env and volume mapping
+├── .dockerignore
 ├── go.mod
 └── README.md
 ```

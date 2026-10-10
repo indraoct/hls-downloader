@@ -30,6 +30,8 @@ type DownloaderUsecase struct {
 	repo *repositories.JobRepository
 	// sem enforces maxConcurrentDownloads.
 	sem chan struct{}
+	// outputDir is resolved once from $OUTPUT_DIR or ~/Documents/test.
+	outputDir string
 
 	mu      sync.Mutex
 	cancels map[string]context.CancelFunc
@@ -37,9 +39,10 @@ type DownloaderUsecase struct {
 
 func NewDownloaderUsecase(repo *repositories.JobRepository) *DownloaderUsecase {
 	return &DownloaderUsecase{
-		repo:    repo,
-		sem:     make(chan struct{}, maxConcurrentDownloads),
-		cancels: map[string]context.CancelFunc{},
+		repo:      repo,
+		sem:       make(chan struct{}, maxConcurrentDownloads),
+		outputDir: resolveOutputDir(),
+		cancels:   map[string]context.CancelFunc{},
 	}
 }
 
@@ -82,18 +85,33 @@ func (u *DownloaderUsecase) Cancel(id string) bool {
 	return true
 }
 
-// OutputDir returns ~/Documents/test as an absolute path, creating it
-// if needed.
+// OutputDir returns the configured download directory — $OUTPUT_DIR if
+// set, else ~/Documents/test — as an absolute path, creating it if needed.
 func (u *DownloaderUsecase) OutputDir() (string, error) {
-	usr, err := user.Current()
-	if err != nil {
+	if u.outputDir == "" {
+		return "", fmt.Errorf("cannot determine output directory")
+	}
+	if err := os.MkdirAll(u.outputDir, 0o755); err != nil {
 		return "", err
 	}
-	dir := filepath.Join(usr.HomeDir, "Documents", "test")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
+	return u.outputDir, nil
+}
+
+// OutputPath returns the configured output directory without touching
+// the filesystem.
+func (u *DownloaderUsecase) OutputPath() string {
+	return u.outputDir
+}
+
+// resolveOutputDir returns $OUTPUT_DIR if set, else ~/Documents/test.
+func resolveOutputDir() string {
+	if dir := os.Getenv("OUTPUT_DIR"); dir != "" {
+		return dir
 	}
-	return dir, nil
+	if usr, err := user.Current(); err == nil {
+		return filepath.Join(usr.HomeDir, "Documents", "test")
+	}
+	return ""
 }
 
 // runJob executes ffmpeg for a single job (remux HLS -> mp4).

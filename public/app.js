@@ -136,6 +136,9 @@ async function refreshJobs() {
     const res = await fetch("/api/jobs");
     if (!res.ok) return;
     const data = await res.json();
+    if (data.output_dir) {
+      document.getElementById("output-dir").textContent = data.output_dir;
+    }
     renderJobs(data.jobs);
   } catch (_) {
     /* server not ready yet */

@@ -1,0 +1,14 @@
+services:
+  hls-downloader:
+    build: .
+    container_name: hls-downloader
+    ports:
+      - "6969:6969"
+    environment:
+      # Directory inside the container where .mp4 files are written
+      OUTPUT_DIR: /downloads
+    volumes:
+      # Host dir (left) -> container dir (right).
+      # Override the host side: HOST_OUTPUT_DIR=/path/on/host docker compose up
+      - ${HOST_OUTPUT_DIR:-./downloads}:/downloads
+    restart: unless-stopped
