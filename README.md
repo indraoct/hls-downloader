@@ -25,7 +25,7 @@ brew install ffmpeg
 ## Run
 
 ```bash
-go build -o hls-downloader .
+go build -o hls-downloader ./cmd
 ./hls-downloader
 ```
 
@@ -39,6 +39,81 @@ Then open **http://localhost:6969** in your browser.
 4. Finished files appear in `~/Documents/test` as `<name>_ffmpeg.mp4`.
 
 Example: `My Movie (2024)!` → `My_Movie_2024_ffmpeg.mp4`
+
+## Architecture
+
+The app follows a clean-architecture layout. `cmd/main.go` wires the layers together and serves the UI from `public/`; `internal/handlers` only parses HTTP requests and serializes JSON; `internal/usecases` holds all business logic (job orchestration, semaphore, ffmpeg execution); `internal/repositories` owns in-memory job state; `internal/entities` defines the shared `Job` type.
+
+```mermaid
+flowchart LR
+    subgraph Browser["Browser — public/"]
+        UI["index.html · app.js · style.css"]
+    end
+
+    subgraph App["hls-downloader (Go)"]
+        direction TB
+        MAIN["cmd/main.go<br/>mux + FileServer on :6969"]
+        HND["internal/handlers<br/>Download · Jobs · Cancel · MemStats"]
+        UC["internal/usecases<br/>DownloaderUsecase<br/>semaphore · sanitizeFilename · tailWriter"]
+        REP["internal/repositories<br/>JobRepository — in-memory, mutex-guarded"]
+        ENT["internal/entities<br/>Job"]
+
+        MAIN --> HND
+        HND --> UC
+        UC --> REP
+        UC --> ENT
+    end
+
+    UI -- "REST /api/*" --> MAIN
+    UC -- "exec.CommandContext" --> FF["ffmpeg process"]
+    FF -- "*.mp4" --> OUT["~/Documents/test/"]
+```
+
+### Download lifecycle
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Browser (app.js)
+    participant H as Handler
+    participant U as DownloaderUsecase
+    participant R as JobRepository
+    participant F as ffmpeg
+
+    B->>H: POST /api/download {jobs}
+    loop each URL
+        H->>U: Enqueue(url, filename)
+        U->>R: Create → status "queued"
+        U-->>U: spawn runJob goroutine<br/>waits on semaphore (max 3)
+    end
+    H-->>B: {jobs: [...]}
+
+    U->>R: SetStatus "running"
+    U->>F: ffmpeg -i url -c copy -bsf:a aac_adtstoasc out.mp4
+    F-->>U: exit code / stderr tail
+    U->>R: SetStatus "done" or "error"
+
+    loop poll every 1.5 s
+        B->>H: GET /api/jobs
+        H->>R: List
+        H-->>B: live job statuses
+    end
+```
+
+### Job status transitions
+
+```mermaid
+stateDiagram-v2
+    [*] --> queued: Enqueue
+    queued --> running: semaphore slot free
+    queued --> cancelled: POST /api/cancel (ctx done while waiting)
+    running --> done: ffmpeg exit 0
+    running --> error: ffmpeg non-zero exit
+    running --> cancelled: POST /api/cancel (CommandContext kills ffmpeg)
+    done --> [*]
+    error --> [*]
+    cancelled --> [*]
+```
 
 ## API
 
@@ -70,22 +145,32 @@ ffmpeg -y -i "<m3u8-url>" -c copy -bsf:a aac_adtstoasc "<name>_ffmpeg.mp4"
 
 ## Configuration
 
-| What                | Where                              |
-|---------------------|------------------------------------|
-| Port                | `main.go` — `addr := ":6969"`           |
-| Output directory    | `main.go` — `outputDir()`               |
-| Retained job history| `main.go` — `maxFinishedJobs`           |
-| Parallel downloads  | `main.go` — `maxConcurrentDownloads`    |
+| What                | Where                                                |
+|---------------------|------------------------------------------------------|
+| Port                | `cmd/main.go` — `addr := ":6969"`                    |
+| Output directory    | `internal/usecases/downloader.go` — `OutputDir()`    |
+| Retained job history| `internal/repositories/job_repository.go` — `maxFinishedJobs` |
+| Parallel downloads  | `internal/usecases/downloader.go` — `maxConcurrentDownloads`  |
 
 ## Project structure
 
 ```
 hls-downloader/
-├── main.go          # HTTP server, job management, ffmpeg runner
+├── cmd/
+│   └── main.go                      # Entrypoint: wiring + HTTP server
+├── internal/
+│   ├── entities/
+│   │   └── job.go                   # Job domain type
+│   ├── repositories/
+│   │   └── job_repository.go        # In-memory job store + eviction
+│   ├── usecases/
+│   │   └── downloader.go            # ffmpeg runner, semaphore, cancel
+│   └── handlers/
+│       └── handlers.go              # HTTP handlers
+├── public/
+│   ├── index.html                   # UI markup
+│   ├── style.css                    # UI styles
+│   └── app.js                       # Dynamic inputs + status polling
 ├── go.mod
-├── static/
-│   ├── index.html   # UI markup
-│   ├── style.css    # UI styles
-│   └── app.js       # Dynamic inputs + status polling
 └── README.md
 ```
