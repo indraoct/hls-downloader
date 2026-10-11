@@ -255,9 +255,27 @@ async function refreshMem() {
   }
 }
 
+// ---- Power (server off) ----
+
+const powerBtn = document.getElementById("power-btn");
+const jobsTimer = setInterval(refreshJobs, 1500);
+const memTimer = setInterval(refreshMem, 1000);
+
+powerBtn.addEventListener("click", async () => {
+  if (!confirm("Shut the server down? Running downloads will be stopped.")) return;
+  powerBtn.disabled = true;
+  try {
+    await fetch("/api/shutdown", { method: "POST" });
+  } catch (_) {
+    /* connection may drop as the server exits — that's expected */
+  }
+  clearInterval(jobsTimer);
+  clearInterval(memTimer);
+  powerBtn.textContent = "Server: OFF";
+  powerBtn.title = "Server stopped — restart it from the terminal";
+});
+
 addRow();
 refreshJobs();
 refreshMem();
-setInterval(refreshJobs, 1500);
-setInterval(refreshMem, 1000);
 window.addEventListener("resize", drawChart);

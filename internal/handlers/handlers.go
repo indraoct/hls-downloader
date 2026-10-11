@@ -2,6 +2,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"runtime"
@@ -14,10 +15,12 @@ import (
 // Handler exposes the downloader usecase over HTTP.
 type Handler struct {
 	uc *usecases.DownloaderUsecase
+	// shutdown gracefully stops the HTTP server (srv.Shutdown).
+	shutdown func(context.Context) error
 }
 
-func NewHandler(uc *usecases.DownloaderUsecase) *Handler {
-	return &Handler{uc: uc}
+func NewHandler(uc *usecases.DownloaderUsecase, shutdown func(context.Context) error) *Handler {
+	return &Handler{uc: uc, shutdown: shutdown}
 }
 
 type downloadRequest struct {
@@ -76,6 +79,25 @@ func (h *Handler) Cancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// Shutdown handles POST /api/shutdown — it responds first, then stops
+// the server so this request can complete before the socket closes.
+func (h *Handler) Shutdown(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(map[string]any{"ok": true})
+
+	go func() {
+		time.Sleep(300 * time.Millisecond) // let the response flush
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = h.shutdown(ctx)
+	}()
 }
 
 // MemStats handles GET /api/memstats — it reports Go runtime memory

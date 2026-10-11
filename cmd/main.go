@@ -13,7 +13,13 @@ import (
 func main() {
 	repo := repositories.NewJobRepository()
 	uc := usecases.NewDownloaderUsecase(repo)
-	h := handlers.NewHandler(uc)
+
+	addr := ":6969"
+	srv := &http.Server{
+		Addr:              addr,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	h := handlers.NewHandler(uc, srv.Shutdown)
 
 	dir, err := uc.OutputDir()
 	if err != nil {
@@ -27,13 +33,12 @@ func main() {
 	mux.HandleFunc("/api/jobs", h.Jobs)
 	mux.HandleFunc("/api/memstats", h.MemStats)
 	mux.HandleFunc("/api/cancel", h.Cancel)
+	mux.HandleFunc("/api/shutdown", h.Shutdown)
+	srv.Handler = mux
 
-	addr := ":6969"
 	log.Printf("Listening on http://localhost%s", addr)
-	srv := &http.Server{
-		Addr:              addr,
-		Handler:           mux,
-		ReadHeaderTimeout: 10 * time.Second,
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatal(err)
 	}
-	log.Fatal(srv.ListenAndServe())
+	log.Println("Server stopped")
 }
